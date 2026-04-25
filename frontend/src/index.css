@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  body {
+    background-color: #1A1B1E;
+    color: #C1C2C5;
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    overflow: hidden;
+  }
+}
+
+@layer components {
+  .editor-content {
+    font-family: 'Lora', Georgia, serif;
+    font-size: 17px;
+    line-height: 1.8;
+    color: #1A1A2E;
+    caret-color: #4F6CF0;
+  }
+
+  .editor-content p {
+    margin: 0 0 1em 0;
+  }
+
+  /* TipTap placeholder */
+  .tiptap p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: #9ca3af;
+    pointer-events: none;
+    float: left;
+    height: 0;
+    font-style: italic;
+  }
+
+  .tiptap:focus {
+    outline: none;
+  }
+
+  /* Selected text highlight */
+  .tiptap ::selection {
+    background: rgba(108, 142, 245, 0.25);
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #3a3b40; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #5C5F66; }
+}

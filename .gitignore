@@ -1,0 +1,26 @@
+# CodeBuddy internal
+.codebuddy/
+
+node_modules/
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+frontend/dist-ssr/
+
+# Vite cache
+frontend/.vite/
+
+# Logs
+*.log
+/tmp/
+
+# Editor
+.DS_Store
+.vscode/
+*.local
+
+# Env
+.env
+.env.local
+.env.*.local
