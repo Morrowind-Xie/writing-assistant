@@ -280,6 +280,7 @@ export default function App() {
             onFeedback={handleFeedback}
             onInsert={handleInsert}
             onClearAll={handleClearAll}
+            onCommand={handleCommandSubmit}
             memoryStatus={memoryStatus}
           />
         </div>

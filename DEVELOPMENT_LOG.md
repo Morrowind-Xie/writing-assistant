@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-04-26｜功能：AI 面板常驻输入框
+
+### 问题
+AI 面板只展示建议，没有任何可见的用户输入入口。新用户不知道如何主动向 AI 提问或发指令（只能靠 `Ctrl+Shift+P` 快捷键，完全不可发现）。
+
+### 解决方案
+
+在 `SuggestionPanel` 底部新增常驻聊天输入框：
+
+- **输入框**：自动增高的 `<textarea>`，`Enter` 发送，`Shift+Enter` 换行
+- **发送按钮**：`SendHorizonal` 图标，输入为空时 disabled
+- **快捷指令 chips**：面板空白时展示 4 个常用指令气泡，点击直接发送
+- **提示文字**：底部显示快捷键说明（Enter/Shift+Enter/Ctrl+Shift+P）
+- 空白提示语由"暂无 AI 建议"改为"在下方输入指令"，更具引导性
+
+### 修改文件
+
+- `frontend/src/components/AiPanel/SuggestionPanel.tsx`：新增输入区、快捷指令 chips，新增 `onCommand` prop
+- `frontend/src/App.tsx`：`SuggestionPanel` 传入 `onCommand={handleCommandSubmit}`
+
+---
+
 ## 2026-04-26｜功能：文件新建、打开、保存
 
 ### 功能概述
