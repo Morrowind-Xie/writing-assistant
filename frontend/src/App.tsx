@@ -7,9 +7,10 @@ import { SuggestionPanel } from './components/AiPanel/SuggestionPanel'
 import { StatusBar } from './components/StatusBar'
 import { EditorContext } from './hooks/useEditorContext'
 import { useHermesStatus } from './hooks/useHermesStatus'
+import { useFileManager } from './hooks/useFileManager'
 import { streamChatCompletion, rememberPreference } from './api/hermesClient'
 import { AiSuggestion, FeedbackType, ChatMessage } from './types'
-import { Settings, PenLine } from 'lucide-react'
+import { Settings, PenLine, FilePlus, FolderOpen, Save } from 'lucide-react'
 
 let _suggestionCounter = 0
 const newId = () => `s-${++_suggestionCounter}-${Date.now()}`
@@ -46,16 +47,19 @@ function buildMessages(
 export default function App() {
   const hermesStatus = useHermesStatus(30000)
 
+  const editorRef = useRef<Editor | null>(null)
   const [editor, setEditor] = useState<Editor | null>(null)
   const [selectedText, setSelectedText] = useState('')
   const [wordCount, setWordCount] = useState(0)
   const [paragraphCount, setParagraphCount] = useState(0)
 
+  const { fileName, isDirty, lastSaved, handleNew, handleOpen, handleSave, markDirty, fileInputRef } =
+    useFileManager(() => editorRef.current)
+
   const [suggestions, setSuggestions] = useState<AiSuggestion[]>([])
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
   const [memoryStatus, setMemoryStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
-  const [lastSaved] = useState<Date | null>(null)
 
   const abortRefs = useRef<Map<string, AbortController>>(new Map())
 
@@ -100,16 +104,18 @@ export default function App() {
   )
 
   const handleEditorReady = useCallback((ed: Editor) => {
+    editorRef.current = ed
     setEditor(ed)
   }, [])
 
   const handleWordCountChange = useCallback((count: number) => {
     setWordCount(count)
+    markDirty()
     if (editor) {
       const text = editor.getText()
       setParagraphCount(text.split(/\n+/).filter((p) => p.trim()).length)
     }
-  }, [editor])
+  }, [editor, markDirty])
 
   const handleSelectionChange = useCallback((text: string) => {
     setSelectedText(text)
@@ -124,6 +130,10 @@ export default function App() {
   const handleTriggerCommand = useCallback(() => {
     setCommandOpen(true)
   }, [])
+
+  const handleTriggerSave = useCallback(() => {
+    handleSave()
+  }, [handleSave])
 
   // Floating toolbar action (refine/rewrite/shorten/expand/translate)
   const handleToolbarAction = useCallback((action: string, text: string) => {
@@ -176,6 +186,15 @@ export default function App() {
   return (
     <EditorContext.Provider value={{ editor, selectedText, wordCount }}>
       <div className="flex flex-col h-screen bg-[#1A1B1E] text-white overflow-hidden">
+        {/* Hidden file input for open */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt,.md"
+          className="hidden"
+          aria-hidden
+        />
+
         {/* Top Navigation Bar */}
         <header className="flex items-center justify-between px-5 h-10 bg-[#17181C]/90
           backdrop-blur-sm border-b border-white/8 shrink-0 z-10">
@@ -183,9 +202,38 @@ export default function App() {
             <PenLine size={15} className="text-[#6C8EF5]" />
             <span className="text-sm font-medium text-white/80">写作助手</span>
             <span className="text-white/20 text-xs mx-1">·</span>
-            <span className="text-xs text-white/35">无标题文档</span>
+            <span className="text-xs text-white/35">{fileName}</span>
+            {isDirty && (
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block"
+                title="有未保存的更改"
+              />
+            )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
+            {/* File action buttons */}
+            <button
+              onClick={handleNew}
+              title="新建文档"
+              className="text-white/30 hover:text-white/70 transition-colors p-1.5 cursor-pointer rounded hover:bg-white/5"
+            >
+              <FilePlus size={14} />
+            </button>
+            <button
+              onClick={handleOpen}
+              title="打开文件 (.txt / .md)"
+              className="text-white/30 hover:text-white/70 transition-colors p-1.5 cursor-pointer rounded hover:bg-white/5"
+            >
+              <FolderOpen size={14} />
+            </button>
+            <button
+              onClick={handleSave}
+              title="保存文件 (Ctrl+S)"
+              className="text-white/30 hover:text-white/70 transition-colors p-1.5 cursor-pointer rounded hover:bg-white/5"
+            >
+              <Save size={14} />
+            </button>
+            <span className="w-px h-4 bg-white/10 mx-1" />
             {/* Hermes status dot */}
             <div className="flex items-center gap-1.5 text-xs text-white/40">
               <div className={`w-1.5 h-1.5 rounded-full ${
@@ -195,7 +243,7 @@ export default function App() {
                 {hermesStatus.online ? 'hermes 已连接' : 'hermes 离线'}
               </span>
             </div>
-            <button className="text-white/30 hover:text-white/70 transition-colors p-1 cursor-pointer">
+            <button className="text-white/30 hover:text-white/70 transition-colors p-1 cursor-pointer ml-2">
               <Settings size={14} />
             </button>
           </div>
@@ -219,6 +267,7 @@ export default function App() {
                 onWordCountChange={handleWordCountChange}
                 onTriggerContinue={handleTriggerContinue}
                 onTriggerCommand={handleTriggerCommand}
+                onTriggerSave={handleTriggerSave}
               />
             </div>
           </div>

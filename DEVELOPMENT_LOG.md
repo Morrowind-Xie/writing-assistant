@@ -4,6 +4,48 @@
 
 ---
 
+## 2026-04-26｜功能：文件新建、打开、保存
+
+### 功能概述
+
+基于浏览器原生 File API，在现有 TipTap 编辑器上叠加轻量级文件管理层，无需后端或 Electron，实现本地文件的完整生命周期管理。
+
+### 新增文件
+
+- `frontend/src/hooks/useFileManager.ts`：核心 hook，封装文件管理全部逻辑
+
+### 修改文件
+
+- `frontend/src/components/Editor/WritingEditor.tsx`：新增 `onTriggerSave` prop，注册 `Ctrl+S` 快捷键
+- `frontend/src/App.tsx`：接入 `useFileManager`，顶栏添加操作按钮
+
+### 技术实现
+
+**`useFileManager` hook**
+
+| 能力 | 实现方式 |
+|---|---|
+| 新建文档 | `editor.commands.clearContent()` + `window.confirm` 未保存确认 |
+| 打开文件 | 隐藏 `<input type="file" accept=".txt,.md">` + `FileReader.readAsText` |
+| 保存文件 | `Blob` + 动态 `<a download>` + `URL.createObjectURL` |
+| Dirty 标记 | 每次 `onWordCountChange` 时 `markDirty()`，保存后重置 |
+| lastSaved | 保存时 `setLastSaved(new Date())`，状态栏实时显示 |
+
+**顶栏变更**
+
+- 文件名动态显示（打开后显示真实文件名）
+- Dirty 时文件名旁显示橙色小圆点
+- 新增三个图标按钮：`FilePlus`（新建）、`FolderOpen`（打开）、`Save`（保存）
+- `Ctrl+S` 快捷键在 TipTap ShortcutExtension 中注册
+
+### 快捷键
+
+| 快捷键 | 功能 |
+|---|---|
+| `Ctrl+S` | 保存当前文档 |
+
+---
+
 ## 2026-04-25｜Debug：hermes API 403 / FloatingToolbar 崩溃
 
 ### 症状

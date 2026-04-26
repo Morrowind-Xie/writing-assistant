@@ -2,7 +2,7 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Extension } from '@tiptap/core'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Editor } from '@tiptap/react'
 
 interface WritingEditorProps {
@@ -11,6 +11,7 @@ interface WritingEditorProps {
   onWordCountChange: (count: number) => void
   onTriggerContinue: (context: string) => void
   onTriggerCommand: () => void
+  onTriggerSave: () => void
 }
 
 const countWords = (text: string) =>
@@ -22,11 +23,22 @@ export function WritingEditor({
   onWordCountChange,
   onTriggerContinue,
   onTriggerCommand,
+  onTriggerSave,
 }: WritingEditorProps) {
   const onTriggerContinueRef = useRef(onTriggerContinue)
   const onTriggerCommandRef = useRef(onTriggerCommand)
+  const onTriggerSaveRef = useRef(onTriggerSave)
   onTriggerContinueRef.current = onTriggerContinue
   onTriggerCommandRef.current = onTriggerCommand
+  onTriggerSaveRef.current = onTriggerSave
+
+  // Delay mount until container DOM is ready, avoiding prosemirror-view
+  // getBoundingClientRect crash during initial hydration
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setMounted(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
 
   const ShortcutExtension = Extension.create({
     name: 'writingShortcuts',
@@ -35,6 +47,10 @@ export function WritingEditor({
         'Alt-/': () => {
           const text = this.editor.getText()
           onTriggerContinueRef.current(text)
+          return true
+        },
+        'Ctrl-s': () => {
+          onTriggerSaveRef.current()
           return true
         },
         'Ctrl-Shift-p': () => {
@@ -71,6 +87,8 @@ export function WritingEditor({
       const selected = editor.state.doc.textBetween(from, to, ' ')
       onSelectionChange(selected)
     },
+    // Only create editor after DOM is ready
+    immediatelyRender: false,
   })
 
   useEffect(() => {
@@ -79,7 +97,7 @@ export function WritingEditor({
 
   return (
     <div className="relative h-full">
-      <EditorContent editor={editor} className="h-full" />
+      {mounted && <EditorContent editor={editor} className="h-full" />}
     </div>
   )
 }
