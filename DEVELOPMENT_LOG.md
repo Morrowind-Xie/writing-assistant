@@ -4,6 +4,51 @@
 
 ---
 
+## 2026-04-26｜功能：AI 直接编辑文档（直接编辑模式）
+
+### 需求
+AI 之前只能把结果推到建议卡片，用户需要手动点"插入"才能进入文档。
+需要让 AI 能"看到"文档当前状态（光标位置、选区、前后文），并能直接操作文档。
+
+### 设计
+
+两种模式，由 AI 面板底部的切换按钮控制：
+
+| 模式 | 行为 |
+|---|---|
+| **建议模式**（默认） | AI 回复流入右侧卡片，用户确认后插入，可反馈学习 |
+| **直接编辑模式** | AI 流式输出直接写入编辑器，有选区则替换选区，无选区则在光标处插入 |
+
+### 实现细节
+
+**1. 文档上下文感知（`getEditorSnapshot`）**
+- 从 TipTap editor 读取：全文纯文本、当前选区文字、光标前 500 字、光标后 500 字、是否有选区
+- 每次发送请求时实时抓取快照，确保 AI 看到最新状态
+
+**2. `buildMessages` 升级**
+- 接收 `EditorSnapshot` 代替原来的 `context` 字符串
+- `command` 类型请求注入结构化文档上下文（选中位置前后文 + 完整文章）
+- 其余类型（续写/润色等）保持原有逻辑，使用 selectedText 或 fullText
+
+**3. `launchDirectEdit`（新增）**
+- 先保存撤销检查点（`setMeta addToHistory`）
+- 有选区：先 `deleteRange` 删除选区，再在原位置流式插入
+- 无选区：在光标处流式插入
+- 每个 token 通过 `insertContentAt` 逐字写入，insertPos 随之递增
+- 流结束后再次设置撤销边界，确保 `Ctrl+Z` 一次性撤销整个 AI 编辑
+
+**4. UI（`SuggestionPanel`）**
+- 新增模式切换 tab：「建议模式 / 直接编辑模式」
+- 直接编辑模式激活时，输入框 placeholder 和发送图标切换为铅笔样式
+- 顶部 banner 显示「AI 正在直接编辑文档… Ctrl+Z 可撤销」
+- 直接编辑进行中，发送按钮 disabled，防止并发写入
+
+### 修改文件
+- `frontend/src/App.tsx`：`getEditorSnapshot`、`buildMessages` 重构，新增 `launchDirectEdit`、`directEditActive` 状态，`handleCommandSubmit` 支持 `directEdit` 参数
+- `frontend/src/components/AiPanel/SuggestionPanel.tsx`：新增模式切换 UI、banner、props 扩展
+
+---
+
 ## 2026-04-26｜功能：优化保存逻辑（首次选路径，后续静默覆盖）
 
 ### 问题

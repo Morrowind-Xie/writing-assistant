@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ChevronRight, Brain, Trash2, SendHorizonal, Lightbulb } from 'lucide-react'
+import { ChevronRight, Brain, Trash2, SendHorizonal, Lightbulb, Pencil, MessageSquare, Loader2 } from 'lucide-react'
 import { AiSuggestion, FeedbackType } from '../../types'
 import { SuggestionCard } from './SuggestionCard'
 
@@ -10,7 +10,10 @@ interface SuggestionPanelProps {
   onFeedback: (id: string, feedback: FeedbackType) => void
   onInsert: (content: string) => void
   onClearAll: () => void
-  onCommand: (command: string) => void
+  /** directEdit=true → AI streams directly into editor; false → goes into suggestion card */
+  onCommand: (command: string, directEdit: boolean) => void
+  /** Whether a direct-edit stream is currently running */
+  directEditActive: boolean
   memoryStatus?: 'idle' | 'saving' | 'saved'
 }
 
@@ -29,16 +32,22 @@ export function SuggestionPanel({
   onInsert,
   onClearAll,
   onCommand,
+  directEditActive,
   memoryStatus = 'idle',
 }: SuggestionPanelProps) {
   const [input, setInput] = useState('')
+  const [directMode, setDirectMode] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const submit = (cmd: string) => {
     const trimmed = cmd.trim()
     if (!trimmed) return
-    onCommand(trimmed)
+    onCommand(trimmed, directMode)
     setInput('')
+    // reset textarea height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '22px'
+    }
     textareaRef.current?.focus()
   }
 
@@ -91,6 +100,14 @@ export function SuggestionPanel({
         </button>
       </div>
 
+      {/* Direct-edit banner */}
+      {!collapsed && directEditActive && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-[#6C8EF5]/10 border-b border-[#6C8EF5]/20 shrink-0">
+          <Loader2 size={12} className="text-[#6C8EF5] animate-spin" />
+          <span className="text-xs text-[#6C8EF5]">AI 正在直接编辑文档… Ctrl+Z 可撤销</span>
+        </div>
+      )}
+
       {/* Content */}
       {!collapsed && (
         <>
@@ -103,7 +120,7 @@ export function SuggestionPanel({
                 <div>
                   <p className="text-sm text-white/40 font-medium">在下方输入指令</p>
                   <p className="text-xs text-white/25 mt-1 leading-relaxed">
-                    或按 Ctrl+Space 快速续写<br />
+                    或按 Alt+/ 快速续写<br />
                     选中文字后使用浮动工具条
                   </p>
                 </div>
@@ -138,6 +155,34 @@ export function SuggestionPanel({
 
           {/* Input area */}
           <div className="border-t border-white/8 p-3 shrink-0">
+            {/* Mode toggle */}
+            <div className="flex items-center gap-1 mb-2 bg-[#17181C] rounded-lg p-0.5">
+              <button
+                onClick={() => setDirectMode(false)}
+                className={`flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-md
+                  transition-colors cursor-pointer
+                  ${!directMode
+                    ? 'bg-[#2A2B32] text-white/70 shadow-sm'
+                    : 'text-white/30 hover:text-white/50'}`}
+                title="AI 回复进建议卡片，由你确认后插入"
+              >
+                <MessageSquare size={11} />
+                建议模式
+              </button>
+              <button
+                onClick={() => setDirectMode(true)}
+                className={`flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-md
+                  transition-colors cursor-pointer
+                  ${directMode
+                    ? 'bg-[#6C8EF5]/20 text-[#6C8EF5] shadow-sm'
+                    : 'text-white/30 hover:text-white/50'}`}
+                title="AI 直接编辑文档，Ctrl+Z 可撤销"
+              >
+                <Pencil size={11} />
+                直接编辑
+              </button>
+            </div>
+
             <div className="flex items-end gap-2 bg-[#17181C] rounded-xl border border-white/8
               focus-within:border-[#6C8EF5]/40 transition-colors px-3 py-2">
               <textarea
@@ -146,28 +191,31 @@ export function SuggestionPanel({
                 value={input}
                 onChange={(e) => {
                   setInput(e.target.value)
-                  // auto-grow
                   e.target.style.height = 'auto'
                   e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`
                 }}
                 onKeyDown={handleKeyDown}
-                placeholder="输入指令，Enter 发送…"
+                placeholder={directMode ? '输入指令，AI 将直接修改文档…' : '输入指令，Enter 发送…'}
                 className="flex-1 bg-transparent text-sm text-white placeholder-white/25
                   outline-none resize-none leading-relaxed min-h-[22px] max-h-[120px]"
                 style={{ height: '22px' }}
               />
               <button
                 onClick={() => submit(input)}
-                disabled={!input.trim()}
-                className="shrink-0 mb-0.5 text-[#6C8EF5] disabled:text-white/20
-                  hover:text-[#8AABFF] transition-colors cursor-pointer disabled:cursor-default"
-                title="发送 (Enter)"
+                disabled={!input.trim() || directEditActive}
+                className={`shrink-0 mb-0.5 transition-colors cursor-pointer disabled:cursor-default
+                  ${directMode
+                    ? 'text-[#6C8EF5] hover:text-[#8AABFF] disabled:text-white/20'
+                    : 'text-[#6C8EF5] hover:text-[#8AABFF] disabled:text-white/20'}`}
+                title={directMode ? '直接编辑 (Enter)' : '发送 (Enter)'}
               >
-                <SendHorizonal size={16} />
+                {directMode ? <Pencil size={15} /> : <SendHorizonal size={16} />}
               </button>
             </div>
             <p className="text-[10px] text-white/20 mt-1.5 text-center">
-              Enter 发送 · Shift+Enter 换行 · Ctrl+Shift+P 指令面板
+              {directMode
+                ? 'AI 直接修改文档 · Ctrl+Z 撤销 · Shift+Enter 换行'
+                : 'Enter 发送 · Shift+Enter 换行 · Ctrl+Shift+P 指令面板'}
             </p>
           </div>
         </>

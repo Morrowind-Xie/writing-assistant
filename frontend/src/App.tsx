@@ -15,10 +15,34 @@ import { Settings, PenLine, FilePlus, FolderOpen, Save, SaveAll } from 'lucide-r
 let _suggestionCounter = 0
 const newId = () => `s-${++_suggestionCounter}-${Date.now()}`
 
+// Snapshot of editor state at the moment a request is fired
+interface EditorSnapshot {
+  fullText: string       // 全文纯文本
+  selectedText: string   // 当前选区文字（可为空）
+  beforeCursor: string   // 光标前约 500 字
+  afterCursor: string    // 光标后约 500 字
+  hasSelection: boolean  // 是否有选区
+}
+
+function getEditorSnapshot(editor: Editor, selectedTxt: string): EditorSnapshot {
+  const fullText = editor.getText()
+  const { from, to } = editor.state.selection
+  const hasSelection = from !== to
+
+  // coordsAtPos 用 pos 转换字符偏移，这里直接用 textBetween 获取前后文
+  const beforeCursor = editor.state.doc.textBetween(
+    Math.max(0, from - 500), from, '\n'
+  )
+  const afterCursor = editor.state.doc.textBetween(
+    to, Math.min(editor.state.doc.content.size, to + 500), '\n'
+  )
+
+  return { fullText, selectedText: selectedTxt, beforeCursor, afterCursor, hasSelection }
+}
+
 function buildMessages(
   type: AiSuggestion['type'],
-  context: string,
-  selectedText?: string,
+  snapshot: EditorSnapshot,
   command?: string,
 ): ChatMessage[] {
   const styleNote =
@@ -28,14 +52,21 @@ function buildMessages(
     `你是一个专业的智能写作助手，辅助用户进行中文文章的生成和编辑。${styleNote}
 回复时只输出写作内容本身，不要解释、不要前缀，直接开始正文。`
 
+  const { fullText, selectedText, beforeCursor, afterCursor, hasSelection } = snapshot
+
+  // 构建文档上下文描述，让 AI 清楚地感知当前光标位置和选区
+  const docContext = hasSelection
+    ? `【选中文字】\n${selectedText}\n\n【选中位置前文】\n${beforeCursor}\n\n【选中位置后文】\n${afterCursor}`
+    : `【光标前文】\n${beforeCursor}\n\n【光标后文】\n${afterCursor}`
+
   const userPrompts: Record<AiSuggestion['type'], string> = {
-    continue: `请根据以下文章内容，继续写下一段（约150字）：\n\n${context}`,
-    refine: `请润色以下文字，使其更加流畅自然，保持原意：\n\n${selectedText || context}`,
-    shorten: `请将以下文字精简为核心要点，保留关键信息：\n\n${selectedText || context}`,
-    expand: `请将以下文字扩展为更详细的内容（约原文2倍长）：\n\n${selectedText || context}`,
-    rewrite: `请改写以下文字，保持内容不变但表达方式不同：\n\n${selectedText || context}`,
-    translate: `请将以下内容翻译为英文：\n\n${selectedText || context}`,
-    command: `用户指令：${command}\n\n当前文章内容（供参考）：\n${context}`,
+    continue: `请根据以下文章内容，继续写下一段（约150字）：\n\n${fullText}`,
+    refine: `请润色以下文字，使其更加流畅自然，保持原意：\n\n${selectedText || fullText}`,
+    shorten: `请将以下文字精简为核心要点，保留关键信息：\n\n${selectedText || fullText}`,
+    expand: `请将以下文字扩展为更详细的内容（约原文2倍长）：\n\n${selectedText || fullText}`,
+    rewrite: `请改写以下文字，保持内容不变但表达方式不同：\n\n${selectedText || fullText}`,
+    translate: `请将以下内容翻译为英文：\n\n${selectedText || fullText}`,
+    command: `用户指令：${command}\n\n【当前文档上下文】\n${docContext}\n\n【完整文章】\n${fullText}`,
   }
 
   return [
@@ -63,11 +94,12 @@ export default function App() {
 
   const abortRefs = useRef<Map<string, AbortController>>(new Map())
 
-  // Launch an AI suggestion stream
+  // ── Mode A: stream into suggestion card (review before inserting) ──────────
   const launchSuggestion = useCallback(
-    (type: AiSuggestion['type'], context: string, selectedTxt?: string, command?: string) => {
-      if (!hermesStatus.online) return
+    (type: AiSuggestion['type'], command?: string) => {
+      if (!hermesStatus.online || !editorRef.current) return
 
+      const snapshot = getEditorSnapshot(editorRef.current, selectedText)
       const id = newId()
       const label = { continue:'续写', refine:'润色', shorten:'精简', expand:'扩展',
                       rewrite:'改写', translate:'翻译', command:'指令' }[type]
@@ -82,7 +114,7 @@ export default function App() {
       const ctrl = new AbortController()
       abortRefs.current.set(id, ctrl)
 
-      const messages = buildMessages(type, context, selectedTxt, command)
+      const messages = buildMessages(type, snapshot, command)
 
       streamChatCompletion(
         messages,
@@ -100,7 +132,65 @@ export default function App() {
         ctrl.signal,
       )
     },
-    [hermesStatus.online, panelCollapsed],
+    [hermesStatus.online, panelCollapsed, selectedText],
+  )
+
+  // ── Mode B: stream directly into editor (AI edits the doc in real-time) ───
+  const [directEditActive, setDirectEditActive] = useState(false)
+
+  const launchDirectEdit = useCallback(
+    (type: AiSuggestion['type'], command?: string) => {
+      const ed = editorRef.current
+      if (!hermesStatus.online || !ed) return
+
+      const snapshot = getEditorSnapshot(ed, selectedText)
+      const { from, to } = ed.state.selection
+      const hasSelection = from !== to
+
+      // Save undo checkpoint before AI modifies content
+      ed.commands.setMeta('addToHistory', true)
+
+      // Insert placeholder so user sees activity immediately
+      if (hasSelection) {
+        // Replace selection: delete it first, then stream in
+        ed.chain().focus().deleteRange({ from, to }).run()
+      } else {
+        ed.chain().focus().setTextSelection(from).run()
+      }
+
+      // Track insertion position (after deletion, cursor is at from)
+      let insertPos = hasSelection ? from : from
+      let accumulated = ''
+
+      const ctrl = new AbortController()
+      const id = newId()
+      abortRefs.current.set(id, ctrl)
+
+      setDirectEditActive(true)
+
+      const messages = buildMessages(type, snapshot, command)
+
+      streamChatCompletion(
+        messages,
+        (token) => {
+          accumulated += token
+          // Insert token at current insertPos and advance
+          ed.chain()
+            .focus()
+            .insertContentAt(insertPos, token)
+            .run()
+          insertPos += token.length
+        },
+        () => {
+          abortRefs.current.delete(id)
+          setDirectEditActive(false)
+          // Create undo boundary so Ctrl+Z undoes entire AI edit as one step
+          ed.commands.setMeta('addToHistory', true)
+        },
+        ctrl.signal,
+      )
+    },
+    [hermesStatus.online, selectedText],
   )
 
   const handleEditorReady = useCallback((ed: Editor) => {
@@ -121,9 +211,10 @@ export default function App() {
     setSelectedText(text)
   }, [])
 
-  // Ctrl+Space: continue writing
+  // Ctrl+Space / Alt+/ : continue writing
   const handleTriggerContinue = useCallback((context: string) => {
-    launchSuggestion('continue', context)
+    void context // context already available via editorRef in launchSuggestion
+    launchSuggestion('continue')
   }, [launchSuggestion])
 
   // Ctrl+Shift+P: open command palette
@@ -136,17 +227,19 @@ export default function App() {
   }, [handleSave])
 
   // Floating toolbar action (refine/rewrite/shorten/expand/translate)
-  const handleToolbarAction = useCallback((action: string, text: string) => {
-    const context = editor?.getText() || ''
+  const handleToolbarAction = useCallback((action: string, _text: string) => {
     const type = action as AiSuggestion['type']
-    launchSuggestion(type, context, text)
-  }, [editor, launchSuggestion])
+    launchSuggestion(type)
+  }, [launchSuggestion])
 
-  // Command palette submit
-  const handleCommandSubmit = useCallback((command: string) => {
-    const context = editor?.getText() || ''
-    launchSuggestion('command', context, selectedText, command)
-  }, [editor, selectedText, launchSuggestion])
+  // Command from panel input box or CommandPalette
+  const handleCommandSubmit = useCallback((command: string, directEdit = false) => {
+    if (directEdit) {
+      launchDirectEdit('command', command)
+    } else {
+      launchSuggestion('command', command)
+    }
+  }, [launchSuggestion, launchDirectEdit])
 
   const handleFeedback = useCallback((id: string, feedback: FeedbackType) => {
     const suggestion = suggestions.find((s) => s.id === id)
@@ -287,6 +380,7 @@ export default function App() {
             onInsert={handleInsert}
             onClearAll={handleClearAll}
             onCommand={handleCommandSubmit}
+            directEditActive={directEditActive}
             memoryStatus={memoryStatus}
           />
         </div>
