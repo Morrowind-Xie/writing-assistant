@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-04-26｜功能：优化保存逻辑（首次选路径，后续静默覆盖）
+
+### 问题
+原保存逻辑每次都触发浏览器下载对话框，相当于每次"另存为"，无法实现静默覆盖原文件。
+
+### 解决方案
+
+使用 **File System Access API**（`showSaveFilePicker`）：
+
+- **首次保存**：调用 `showSaveFilePicker` 弹出系统文件保存对话框，用户选择路径和文件名，获得 `FileSystemFileHandle`
+- **后续保存（Ctrl+S）**：持有 handle，直接 `createWritable()` 覆盖写入，无弹窗
+- **另存为**（新增 `SaveAll` 按钮）：强制重新弹出选择器，可换路径/改名
+- **降级兼容**：不支持 File System Access API 的浏览器自动回退到原来的 `<a download>` 下载方式
+- **handle 失效处理**：写入时如 handle 权限被撤销，自动清空 handle 并重新弹出选择器
+
+### 修改文件
+
+- `frontend/src/hooks/useFileManager.ts`：核心逻辑重写，新增 `handleSaveAs`，`fileHandleRef` 持久化文件句柄
+- `frontend/src/App.tsx`：解构 `handleSaveAs`，顶栏新增"另存为"图标按钮（`SaveAll`）
+
+---
+
 ## 2026-04-26｜功能：AI 面板常驻输入框
 
 ### 问题

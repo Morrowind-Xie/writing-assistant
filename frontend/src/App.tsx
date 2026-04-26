@@ -10,7 +10,7 @@ import { useHermesStatus } from './hooks/useHermesStatus'
 import { useFileManager } from './hooks/useFileManager'
 import { streamChatCompletion, rememberPreference } from './api/hermesClient'
 import { AiSuggestion, FeedbackType, ChatMessage } from './types'
-import { Settings, PenLine, FilePlus, FolderOpen, Save } from 'lucide-react'
+import { Settings, PenLine, FilePlus, FolderOpen, Save, SaveAll } from 'lucide-react'
 
 let _suggestionCounter = 0
 const newId = () => `s-${++_suggestionCounter}-${Date.now()}`
@@ -53,7 +53,7 @@ export default function App() {
   const [wordCount, setWordCount] = useState(0)
   const [paragraphCount, setParagraphCount] = useState(0)
 
-  const { fileName, isDirty, lastSaved, handleNew, handleOpen, handleSave, markDirty, fileInputRef } =
+  const { fileName, isDirty, lastSaved, handleNew, handleOpen, handleSave, handleSaveAs, markDirty, fileInputRef } =
     useFileManager(() => editorRef.current)
 
   const [suggestions, setSuggestions] = useState<AiSuggestion[]>([])
@@ -227,10 +227,17 @@ export default function App() {
             </button>
             <button
               onClick={handleSave}
-              title="保存文件 (Ctrl+S)"
+              title="保存 (Ctrl+S)"
               className="text-white/30 hover:text-white/70 transition-colors p-1.5 cursor-pointer rounded hover:bg-white/5"
             >
               <Save size={14} />
+            </button>
+            <button
+              onClick={handleSaveAs}
+              title="另存为…"
+              className="text-white/30 hover:text-white/70 transition-colors p-1.5 cursor-pointer rounded hover:bg-white/5"
+            >
+              <SaveAll size={14} />
             </button>
             <span className="w-px h-4 bg-white/10 mx-1" />
             {/* Hermes status dot */}
