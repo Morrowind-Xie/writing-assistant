@@ -1,4 +1,8 @@
-export type FeedbackType = 'accept' | 'modify' | 'reject'
+export type FeedbackType = 'accept' | 'modify' | 'dismiss' | 'reject'
+// accept  → 采纳插入，触发正向记忆
+// modify  → 有修改，仅关闭卡片（暂无额外记忆逻辑）
+// dismiss → 忽略，不采用但无评价，不触发任何记忆
+// reject  → 明确不好，触发反向记忆（以后避免类似风格）
 
 export interface AiSuggestion {
   id: string

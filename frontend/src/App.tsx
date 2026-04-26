@@ -148,24 +148,23 @@ export default function App() {
     launchSuggestion('command', context, selectedText, command)
   }, [editor, selectedText, launchSuggestion])
 
-  // Feedback handler
   const handleFeedback = useCallback((id: string, feedback: FeedbackType) => {
     const suggestion = suggestions.find((s) => s.id === id)
     if (!suggestion) return
 
     if (feedback === 'accept') {
-      // Trigger hermes memory recording in background
       const pref = `用户采纳了类型为「${suggestion.label}」的写作建议，内容摘要：${suggestion.content.slice(0, 120)}`
       setMemoryStatus('saving')
       rememberPreference(pref)
       setTimeout(() => setMemoryStatus('saved'), 2000)
       setTimeout(() => setMemoryStatus('idle'), 5000)
     } else if (feedback === 'reject') {
-      const pref = `用户拒绝了类型为「${suggestion.label}」的写作建议，内容摘要：${suggestion.content.slice(0, 120)}，请避免类似风格`
+      // 明确"不好"才触发反向学习
+      const pref = `用户认为类型为「${suggestion.label}」的写作建议质量不好，内容摘要：${suggestion.content.slice(0, 120)}，请避免类似风格`
       rememberPreference(pref)
     }
+    // dismiss / modify：直接关闭，不触发任何记忆
 
-    // Remove card after feedback
     setSuggestions((prev) => prev.filter((s) => s.id !== id))
   }, [suggestions])
 

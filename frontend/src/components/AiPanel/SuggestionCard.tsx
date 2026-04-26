@@ -1,4 +1,4 @@
-import { Check, Edit3, X, Copy } from 'lucide-react'
+import { Check, Edit3, X, ThumbsDown, Copy } from 'lucide-react'
 import { AiSuggestion, FeedbackType } from '../../types'
 import { StreamingText } from './StreamingText'
 
@@ -76,13 +76,22 @@ export function SuggestionCard({ suggestion, onFeedback, onInsert }: SuggestionC
             修改
           </button>
           <button
+            onClick={() => onFeedback(suggestion.id, 'dismiss')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+              bg-white/8 text-white/40 hover:bg-white/15 hover:text-white/70 transition-colors cursor-pointer"
+            title="忽略（不采用，无评价）"
+          >
+            <X size={12} />
+            忽略
+          </button>
+          <button
             onClick={() => onFeedback(suggestion.id, 'reject')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
               bg-[#FA5252]/10 text-[#FA5252]/70 hover:bg-[#FA5252]/20 hover:text-[#FA5252] transition-colors cursor-pointer"
-            title="拒绝并反向学习"
+            title="不好（反向学习，避免类似风格）"
           >
-            <X size={12} />
-            拒绝
+            <ThumbsDown size={12} />
+            不好
           </button>
           <button
             onClick={handleCopy}
